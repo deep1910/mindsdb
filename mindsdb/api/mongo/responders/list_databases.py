@@ -1,4 +1,4 @@
-from mindsdb_sql.parser.ast import *
+from mindsdb_sql.parser.ast import Show
 from mindsdb.api.mongo.classes import Responder
 import mindsdb.api.mongo.functions as helpers
 
@@ -11,7 +11,7 @@ class Responce(Responder):
     def result(self, query, request_env, mindsdb_env, session):
 
         ast_query = Show(category='databases')
-        data = run_sql_command(mindsdb_env, ast_query)
+        data = run_sql_command(request_env, ast_query)
 
         databases = [
             {

@@ -1,17 +1,19 @@
 import unittest
 from mindsdb.integrations.handlers.cockroach_handler.cockroach_handler import CockroachHandler
-from mindsdb.api.mysql.mysql_proxy.libs.constants.response_type import RESPONSE_TYPE
+from mindsdb.api.executor.data_types.response_type import RESPONSE_TYPE
 
 
 class CockroachHandlerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kwargs = {
-            "host": "localhost",
-            "port": "5432",
-            "user": "mindsdb",
-            "password": "mindsdb",
-            "database": "postgres"
+            "connection_data": {
+                "host": "localhost",
+                "port": "5432",
+                "user": "mindsdb",
+                "password": "mindsdb",
+                "database": "postgres"
+            }
         }
         cls.handler = CockroachHandler('test_cockroach_handler', **cls.kwargs)
 
@@ -25,10 +27,6 @@ class CockroachHandlerTest(unittest.TestCase):
     def test_2_get_tables(self):
         tables = self.handler.get_tables()
         assert tables['type'] is not RESPONSE_TYPE.ERROR
-
-    def test_3_get_views(self):
-        views = self.handler.get_views()
-        assert views['type'] is not RESPONSE_TYPE.ERROR
 
     def test_4_select_query(self):
         query = "SELECT * FROM data.test_mdb WHERE 'id'='1'"

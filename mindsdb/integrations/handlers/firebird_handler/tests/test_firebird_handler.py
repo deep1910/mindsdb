@@ -1,16 +1,18 @@
 import unittest
 from mindsdb.integrations.handlers.firebird_handler.firebird_handler import FirebirdHandler
-from mindsdb.api.mysql.mysql_proxy.libs.constants.response_type import RESPONSE_TYPE
+from mindsdb.api.executor.data_types.response_type import RESPONSE_TYPE
 
 
 class FirebirdHandlerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kwargs = {
-            "host": "localhost",
-            "database": r"C:\Users\minura\Documents\mindsdb\test.fdb",
-            "user": "sysdba",
-            "password": "password"
+            "connection_data": {
+                "host": "localhost",
+                "database": r"C:\Users\minura\Documents\mindsdb\test.fdb",
+                "user": "sysdba",
+                "password": "password"
+            }
         }
         cls.handler = FirebirdHandler('test_firebird_handler', cls.kwargs)
 

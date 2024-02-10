@@ -6,18 +6,20 @@ from pydruid.db import connect
 
 from mindsdb_sql import parse_sql
 from mindsdb_sql.render.sqlalchemy_render import SqlalchemyRender
-from mindsdb.integrations.libs.base_handler import DatabaseHandler
+from mindsdb.integrations.libs.base import DatabaseHandler
 from pydruid.db.sqlalchemy import DruidDialect
 
 from mindsdb_sql.parser.ast.base import ASTNode
 
-from mindsdb.utilities.log import log
+from mindsdb.utilities import log
 from mindsdb.integrations.libs.response import (
     HandlerStatusResponse as StatusResponse,
     HandlerResponse as Response,
     RESPONSE_TYPE
 )
 from mindsdb.integrations.libs.const import HANDLER_CONNECTION_ARG_TYPE as ARG_TYPE
+
+logger = log.getLogger(__name__)
 
 
 class DruidHandler(DatabaseHandler):
@@ -108,7 +110,7 @@ class DruidHandler(DatabaseHandler):
             self.connect()
             response.success = True
         except Exception as e:
-            log.error(f'Error connecting to Pinot, {e}!')
+            logger.error(f'Error connecting to Pinot, {e}!')
             response.error_message = str(e)
         finally:
             if response.success is True and need_to_close:
@@ -147,7 +149,7 @@ class DruidHandler(DatabaseHandler):
                 connection.commit()
                 response = Response(RESPONSE_TYPE.OK)
         except Exception as e:
-            log.error(f'Error running query: {query} on Pinot!')
+            logger.error(f'Error running query: {query} on Pinot!')
             response = Response(
                 RESPONSE_TYPE.ERROR,
                 error_message=str(e)
@@ -217,27 +219,39 @@ class DruidHandler(DatabaseHandler):
 connection_args = OrderedDict(
     host={
         'type': ARG_TYPE.STR,
-        'description': 'The host name or IP address of Apache Druid.'
+        'description': 'The host name or IP address of Apache Druid.',
+        'required': True,
+        'label': 'Host'
     },
     port={
         'type': ARG_TYPE.INT,
-        'description': 'The port that Apache Druid is running on.'
+        'description': 'The port that Apache Druid is running on.',
+        'required': True,
+        'label': 'Port'
     },
     path={
         'type': ARG_TYPE.STR,
-        'description': 'The query path.'
+        'description': 'The query path.',
+        'required': True,
+        'label': 'path'
     },
     scheme={
         'type': ARG_TYPE.STR,
-        'description': 'The URI schema. This parameter is optional and the default will be http.'
+        'description': 'The URI schema. This parameter is optional and the default will be http.',
+        'required': False,
+        'label': 'Scheme'
     },
     user={
         'type': ARG_TYPE.STR,
-        'description': 'The user name used to authenticate with Apache Druid. This parameter is optional.'
+        'description': 'The user name used to authenticate with Apache Druid. This parameter is optional.',
+        'required': False,
+        'label': 'User'
     },
     password={
         'type': ARG_TYPE.STR,
-        'description': 'The password used to authenticate with Apache Druid. This parameter is optional.'
+        'description': 'The password used to authenticate with Apache Druid. This parameter is optional.',
+        'required': False,
+        'label': 'password'
     }
 )
 

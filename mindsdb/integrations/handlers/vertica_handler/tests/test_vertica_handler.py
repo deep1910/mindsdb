@@ -1,18 +1,20 @@
 import unittest
 from mindsdb.integrations.handlers.vertica_handler.vertica_handler import VerticaHandler
-from mindsdb.api.mysql.mysql_proxy.libs.constants.response_type import RESPONSE_TYPE
+from mindsdb.api.executor.data_types.response_type import RESPONSE_TYPE
 
 
 class VerticaHandlerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kwargs = {
-            "host":'127.0.0.1',
-            "port":5433,
-            "user":'dbadmin',
-            "password":'',
-            "database":'VMart',
-            "schema_name":'public'
+            "connection_data": {
+                "host":'127.0.0.1',
+                "port":5433,
+                "user":'dbadmin',
+                "password":'',
+                "database":'VMart',
+                "schema_name":'public'
+            }
     
         }
         cls.handler = VerticaHandler('test_vertica_handler', cls.kwargs)

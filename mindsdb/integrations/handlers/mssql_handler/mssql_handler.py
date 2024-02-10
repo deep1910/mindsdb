@@ -6,8 +6,8 @@ import pandas as pd
 from mindsdb_sql import parse_sql
 from mindsdb_sql.parser.ast.base import ASTNode
 
-from mindsdb.integrations.libs.base_handler import DatabaseHandler
-from mindsdb.utilities.log import log
+from mindsdb.integrations.libs.base import DatabaseHandler
+from mindsdb.utilities import log
 from mindsdb_sql.render.sqlalchemy_render import SqlalchemyRender
 from mindsdb.integrations.libs.response import (
     HandlerStatusResponse as StatusResponse,
@@ -15,6 +15,7 @@ from mindsdb.integrations.libs.response import (
     RESPONSE_TYPE
 )
 
+logger = log.getLogger(__name__)
 
 class SqlServerHandler(DatabaseHandler):
     """
@@ -28,7 +29,7 @@ class SqlServerHandler(DatabaseHandler):
         self.connection_args = kwargs
         self.connection_data = self.connection_args.get('connection_data')
         self.dialect = 'mssql'
-        self.database = kwargs.get('database')
+        self.database = self.connection_data.get('database')
 
         self.connection = None
         self.is_connected = False
@@ -61,7 +62,7 @@ class SqlServerHandler(DatabaseHandler):
             self.connect()
             response.success = True
         except Exception as e:
-            log.error(f'Error connecting to SQL Server {self.database}, {e}!')
+            logger.error(f'Error connecting to SQL Server {self.database}, {e}!')
             response.error_message = str(e)
         finally:
             if response.success is True and need_to_close:
@@ -97,7 +98,7 @@ class SqlServerHandler(DatabaseHandler):
                     response = Response(RESPONSE_TYPE.OK)
                 connection.commit()
             except Exception as e:
-                log.error(f'Error running query: {query} on {self.database}!')
+                logger.error(f'Error running query: {query} on {self.database}!')
                 response = Response(
                     RESPONSE_TYPE.ERROR,
                     error_message=str(e)

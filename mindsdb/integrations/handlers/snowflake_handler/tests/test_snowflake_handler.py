@@ -1,6 +1,6 @@
 from mindsdb.integrations.handlers.snowflake_handler.snowflake_handler import SnowflakeHandler
 import unittest
-from mindsdb.api.mysql.mysql_proxy.libs.constants.response_type import RESPONSE_TYPE
+from mindsdb.api.executor.data_types.response_type import RESPONSE_TYPE
 from mindsdb_sql import parse_sql
 
 
@@ -28,7 +28,7 @@ class SnowflakeHandlerTest(unittest.TestCase):
         assert tbls.type is not RESPONSE_TYPE.ERROR
 
     def test_2_get_columns(self):
-        tbls = self.handler.get_tables()
+        tbls = self.handler.get_columns('home_rentals')
         assert tbls.type is not RESPONSE_TYPE.ERROR
 
     def test_3_select_native(self):

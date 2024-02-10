@@ -1,7 +1,7 @@
 import uuid
 
 from bson.int64 import Int64
-from mindsdb_sql.parser.ast import *
+from mindsdb_sql.parser.ast import Show, Identifier
 
 from mindsdb.api.mongo.classes import Responder
 import mindsdb.api.mongo.functions as helpers
@@ -17,7 +17,7 @@ class Responce(Responder):
             category='tables',
             from_table=Identifier(parts=[database])
         )
-        data = run_sql_command(mindsdb_env, ast_query)
+        data = run_sql_command(request_env, ast_query)
 
         tables = []
         for row in data:

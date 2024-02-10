@@ -2,7 +2,7 @@ import unittest
 from mindsdb_sql import parse_sql
 
 from mindsdb.integrations.handlers.mongodb_handler.utils.mongodb_render import MongodbRender
-from mindsdb.integrations.handlers.mongodb_handler.utils.mongodb_parser import MongodbParser
+from mindsdb.api.mongo.utilities.mongodb_parser import MongodbParser
 
 # How to run:
 #  env PYTHONPATH=./ pytest tests/unit/test_mongodb_handler.py
@@ -74,6 +74,17 @@ class TestMongoDBConverters(unittest.TestCase):
         # TODO test group
 
         # TODO use in queries:  multiline, objectid, isodate
+
+    def test_mongo_parser(self):
+        mql = """
+           db.TransactionFact.find(
+              {'_id': '0', "a": "1", b: 1}
+           )
+        """
+
+        expected_mql = 'db.TransactionFact.find({"_id": "0", "a": "1", "b": 1})'
+
+        assert MongodbParser().from_string(mql).to_string() == expected_mql
 
 
 class TestMongoDBHandler(unittest.TestCase):

@@ -1,20 +1,24 @@
-import copy
-import datetime
-from dateutil.parser import parse as parse_datetime
 import os
-import tempfile
+import copy
 import shutil
+import datetime
+import tempfile
 from pathlib import Path
+from dateutil.parser import parse as parse_datetime
 
 from flask import request
 from flask_restx import Resource, abort
 from flask import current_app as ca
 from dateutil.tz import tzlocal
 
-from mindsdb.utilities.log import log
+from mindsdb.utilities import log
+from mindsdb.utilities.functions import encrypt, decrypt
 from mindsdb.api.http.namespaces.configs.config import ns_conf
-from mindsdb.utilities.log import get_logs
-from mindsdb.interfaces.stream.stream import StreamController
+from mindsdb.utilities.log_controller import get_logs
+from mindsdb.utilities.config import Config
+from mindsdb.api.http.utils import http_error
+
+logger = log.getLogger(__name__)
 
 
 @ns_conf.route('/logs')
@@ -33,12 +37,52 @@ class GetLogs(Resource):
         return {'data': logs}
 
 
+@ns_conf.route('/')
+@ns_conf.param('name', 'Get config')
+class GetConfig(Resource):
+    @ns_conf.doc('get_config')
+    def get(self):
+        config = Config()
+        return {
+            'auth': {
+                'http_auth_enabled': config['auth']['http_auth_enabled'],
+                'username': config['auth']['username'],
+                'password': config['auth']['password']
+            }
+        }
+
+    @ns_conf.doc('put_config')
+    def put(self):
+        data = request.json
+
+        unknown_argumens = list(set(data.keys()) - {'auth'})
+        if len(unknown_argumens) > 0:
+            return http_error(
+                400, 'Wrong arguments',
+                f'Unknown argumens: {unknown_argumens}'
+            )
+
+        for key in data.keys():
+            unknown_argumens = list(
+                set(data[key].keys()) - set(Config()[key].keys())
+            )
+            if len(unknown_argumens) > 0:
+                return http_error(
+                    400, 'Wrong arguments',
+                    f'Unknown argumens: {unknown_argumens}'
+                )
+
+        Config().update(data)
+
+        return '', 200
+
+
 @ns_conf.route('/integrations')
 @ns_conf.param('name', 'List all database integration')
 class ListIntegration(Resource):
     def get(self):
         return {
-            'integrations': [k for k in request.integration_controller.get_all(sensitive_info=False)]
+            'integrations': [k for k in ca.integration_controller.get_all(sensitive_info=False)]
         }
 
 
@@ -47,7 +91,7 @@ class ListIntegration(Resource):
 class AllIntegration(Resource):
     @ns_conf.doc('get_all_integrations')
     def get(self):
-        integrations = request.integration_controller.get_all(sensitive_info=False)
+        integrations = ca.integration_controller.get_all(sensitive_info=False)
         return integrations
 
 
@@ -56,7 +100,7 @@ class AllIntegration(Resource):
 class Integration(Resource):
     @ns_conf.doc('get_integration')
     def get(self, name):
-        integration = request.integration_controller.get(name, sensitive_info=False)
+        integration = ca.integration_controller.get(name, sensitive_info=False)
         if integration is None:
             abort(404, f'Can\'t find database integration: {name}')
         integration = copy.deepcopy(integration)
@@ -65,8 +109,10 @@ class Integration(Resource):
     @ns_conf.doc('put_integration')
     def put(self, name):
         params = {}
-        params.update((request.json or {}).get('params', {}))
-        params.update(request.form or {})
+        if request.is_json:
+            params.update((request.json or {}).get('params', {}))
+        else:
+            params.update(request.form or {})
 
         if len(params) == 0:
             abort(400, "type of 'params' must be dict")
@@ -82,22 +128,40 @@ class Integration(Resource):
                 if temp_dir_path not in file_path.parents:
                     raise Exception(f'Can not save file at path: {file_path}')
                 file.save(file_path)
-                params[key] = file_path
+                params[key] = str(file_path)
 
         is_test = params.get('test', False)
+
+        config = Config()
+        secret_key = config.get('secret_key', 'dummy-key')
+
         if is_test:
             del params['test']
 
-            handler = request.integration_controller.create_tmp_handler(
-                handler_type=params.get('type'),
+            handler_type = params.pop('type', None)
+            params.pop('publish', None)
+            handler = ca.integration_controller.create_tmp_handler(
+                handler_type=handler_type,
                 connection_data=params
             )
+
             status = handler.check_connection()
             if temp_dir is not None:
                 shutil.rmtree(temp_dir)
-            return status, 200
 
-        integration = request.integration_controller.get(name, sensitive_info=False)
+            resp = status.to_json()
+            if status.success and 'code' in params:
+                if hasattr(handler, 'handler_storage'):
+                    # attach storage if exists
+                    export = handler.handler_storage.export_files()
+                    if export:
+                        # encrypt with flask secret key
+                        encrypted = encrypt(export, secret_key)
+                        resp['storage'] = encrypted.decode()
+
+            return resp, 200
+
+        integration = ca.integration_controller.get(name, sensitive_info=False)
         if integration is not None:
             abort(400, f"Integration with name '{name}' already exists")
 
@@ -105,33 +169,38 @@ class Integration(Resource):
             engine = params['type']
             if engine is not None:
                 del params['type']
-            request.integration_controller.add(name, engine, params)
+            params.pop('publish', False)
+            storage = params.pop('storage', None)
+            ca.integration_controller.add(name, engine, params)
 
-            if is_test is False and params.get('publish', False) is True:
-                stream_controller = StreamController(request.company_id)
-                if engine in stream_controller.known_dbs and params.get('publish', False) is True:
-                    stream_controller.setup(name)
+            # copy storage
+            if storage is not None:
+                handler = ca.integration_controller.get_data_handler(name)
+
+                export = decrypt(storage.encode(), secret_key)
+                handler.handler_storage.import_files(export)
+
         except Exception as e:
-            log.error(str(e))
+            logger.error(str(e))
             if temp_dir is not None:
                 shutil.rmtree(temp_dir)
             abort(500, f'Error during config update: {str(e)}')
 
         if temp_dir is not None:
             shutil.rmtree(temp_dir)
-        return '', 200
+        return {}, 200
 
     @ns_conf.doc('delete_integration')
     def delete(self, name):
-        integration = request.integration_controller.get(name)
+        integration = ca.integration_controller.get(name)
         if integration is None:
             abort(400, f"Nothing to delete. '{name}' not exists.")
         try:
-            request.integration_controller.delete(name)
+            ca.integration_controller.delete(name)
         except Exception as e:
-            log.error(str(e))
-            abort(500, f'Error during integration delete: {str(e)}')
-        return '', 200
+            logger.error(str(e))
+            abort(500, f"Error during integration delete: {str(e)}")
+        return "", 200
 
     @ns_conf.doc('modify_integration')
     def post(self, name):
@@ -141,22 +210,19 @@ class Integration(Resource):
 
         if not isinstance(params, dict):
             abort(400, "type of 'params' must be dict")
-        integration = request.integration_controller.get(name)
+        integration = ca.integration_controller.get(name)
         if integration is None:
             abort(400, f"Nothin to modify. '{name}' not exists.")
         try:
             if 'enabled' in params:
                 params['publish'] = params['enabled']
                 del params['enabled']
-            request.integration_controller.modify(name, params)
+            ca.integration_controller.modify(name, params)
 
-            stream_controller = StreamController(request.company_id)
-            if params.get('type') in stream_controller.known_dbs and params.get('publish', False) is True:
-                stream_controller.setup(name)
         except Exception as e:
-            log.error(str(e))
-            abort(500, f'Error during integration modifycation: {str(e)}')
-        return '', 200
+            logger.error(str(e))
+            abort(500, f"Error during integration modifycation: {str(e)}")
+        return "", 200
 
 
 @ns_conf.route('/integrations/<name>/check')
@@ -164,9 +230,9 @@ class Integration(Resource):
 class Check(Resource):
     @ns_conf.doc('check')
     def get(self, name):
-        if request.integration_controller.get(name) is None:
+        if ca.integration_controller.get(name) is None:
             abort(404, f'Can\'t find database integration: {name}')
-        connections = request.integration_controller.check_connections()
+        connections = ca.integration_controller.check_connections()
         return connections.get(name, False), 200
 
 

@@ -1,14 +1,16 @@
 import datetime as dt
+import json
 import threading
-import unittest
 import inspect
 from unittest.mock import patch
+import tempfile
+import os
 
 from pymongo import MongoClient
 from mindsdb_sql import parse_sql
 
-from mindsdb.api.mysql.mysql_proxy.executor.data_types import ExecuteAnswer, ANSWER_TYPE
-from mindsdb.api.mysql.mysql_proxy.classes.sql_query import Column
+from mindsdb.api.executor.data_types.answer import ExecuteAnswer, ANSWER_TYPE
+from mindsdb.api.executor import Column
 
 # How to run:
 #  env PYTHONPATH=./ pytest tests/unit/test_mongodb_server.py
@@ -21,7 +23,7 @@ class TestMongoDBServer(BaseUnitTest):
     def test_mongo_server(self):
 
         # mock sqlquery
-        with patch('mindsdb.api.mysql.mysql_proxy.executor.executor_commands.ExecuteCommands.execute_command') as mock_executor:
+        with patch('mindsdb.api.executor.command_executor.ExecuteCommands.execute_command') as mock_executor:
 
             # if this module was imported in other test it prevents mocking SQLQuery inside MongoServer thread
             # unload_module('mindsdb.api.mysql.mysql_proxy.executor.executor_commands')
@@ -33,6 +35,12 @@ class TestMongoDBServer(BaseUnitTest):
                 },
             }
             # TODO run on own database
+            fdi, cfg_file = tempfile.mkstemp(prefix='mindsdb_conf_')
+
+            with os.fdopen(fdi, 'w') as fd:
+                json.dump(config, fd)
+
+            os.environ['MINDSDB_CONFIG_PATH'] = cfg_file
 
             from mindsdb.api.mongo.server import MongoServer
 
@@ -104,7 +112,7 @@ class TestMongoDBServer(BaseUnitTest):
 
         expected_sql = '''
           SELECT * FROM 
-             (SELECT * FROM mongo.fish WHERE Species = 'Pike')
+             (SELECT * FROM mongo.fish WHERE Species = 'Pike') as fish
              JOIN mindsdb.fish_model1
         '''
         assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
@@ -136,7 +144,7 @@ class TestMongoDBServer(BaseUnitTest):
                SELECT * FROM example_mongo.house_sales2
                 WHERE saledate > latest
                and type = 'house' and bedrooms=2
-             )
+             ) as house_sales2
              JOIN mindsdb.house_sales_model_h1w4
         '''
         assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
@@ -156,7 +164,7 @@ class TestMongoDBServer(BaseUnitTest):
         assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
 
     def t_create_predictor(self, client_con, mock_executor):
-        res = client_con.mongo.predictors.insert_one(
+        res = client_con.myproj.predictors.insert_one(
             {
                 "name": "house_sales_model5",
                 "predict": "ma",
@@ -176,7 +184,7 @@ class TestMongoDBServer(BaseUnitTest):
         ast = mock_executor.call_args[0][0]
 
         expected_sql = '''
-           CREATE PREDICTOR house_sales_model5 
+           CREATE PREDICTOR myproj.house_sales_model5 
            FROM mongo (
                 db.house_sales.find({})
            ) 
@@ -189,3 +197,64 @@ class TestMongoDBServer(BaseUnitTest):
         '''
         assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
 
+    def t_delete_model(self, client_con, mock_executor):
+
+        expected_sql = "DROP PREDICTOR myproj.house_sales_model5"
+
+        client_con.myproj.models.delete_one({'name': 'house_sales_model5'})
+        ast = mock_executor.call_args[0][0]
+
+        assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
+
+        # the same with 'predictors' table
+        mock_executor.reset_mock()
+
+        client_con.myproj.predictors.delete_one({'name': 'house_sales_model5'})
+        ast = mock_executor.call_args[0][0]
+
+        assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
+
+    def t_delete_model_version(self, client_con, mock_executor):
+
+        client_con.myproj.models_versions.delete_one({'name': 'house_sales_model5', 'version': 112})
+
+        ast = mock_executor.call_args[0][0]
+
+        expected_sql = "DELETE FROM myproj.models_versions WHERE name = 'house_sales_model5' and version=112"
+        assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
+
+    # ml engines
+
+    def t_create_ml_engine(self, client_con, mock_executor):
+
+        client_con.myproj.ml_engines.insert_one({'name': "openai2", "handler": "openai", "params": {"api_key": "qqq"}})
+
+        ast = mock_executor.call_args[0][0]
+
+        expected_sql = "CREATE ML_ENGINE openai2 FROM openai USING api_key= 'qqq'"
+        assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
+
+    def t_list_ml_engines(self, client_con, mock_executor):
+
+        res = client_con.myproj.ml_engines.find({})
+        res = list(res)
+
+        ast = mock_executor.call_args[0][0]
+
+        expected_sql = "SHOW ML_ENGINES"
+        assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
+
+    def t_drop_ml_engine(self, client_con, mock_executor):
+
+        client_con.myproj.ml_engines.delete_one({'name': 'openai2'})
+
+        ast = mock_executor.call_args[0][0]
+
+        expected_sql = "DROP ML_ENGINE openai2"
+        assert parse_sql(expected_sql, 'mindsdb').to_string() == ast.to_string()
+
+    def t_delete_model_version_by_id(self, client_con, mock_executor):
+        # TODO
+        #   delete model and version by _id
+        #   need to mock model_controller
+        pass

@@ -57,13 +57,15 @@ import time
 from abc import ABC
 from pathlib import Path
 import hashlib
-import json
-import dill
+import typing as t
+
 import pandas as pd
 import walrus
 
 from mindsdb.utilities.config import Config
 from mindsdb.utilities.json_encoder import CustomJSONEncoder
+from mindsdb.interfaces.storage.fs import FileLock
+from mindsdb.utilities.context import context as ctx
 
 
 def dataframe_checksum(df: pd.DataFrame):
@@ -71,7 +73,7 @@ def dataframe_checksum(df: pd.DataFrame):
     return checksum
 
 
-def json_checksum(obj: [dict, list]):
+def json_checksum(obj: t.Union[dict, list]):
     checksum = str_checksum(CustomJSONEncoder().encode(obj))
     return checksum
 
@@ -117,28 +119,32 @@ class FileCache(BaseCache):
         if path is None:
             path = self.config['paths']['cache']
 
-        # include category
         cache_path = Path(path) / category
-        if not os.path.exists(cache_path):
-            os.makedirs(cache_path)
+
+        company_id = ctx.company_id
+        if company_id is not None:
+            cache_path = cache_path / str(company_id)
+        cache_path.mkdir(parents=True, exist_ok=True)
 
         self.path = cache_path
 
     def clear_old_cache(self):
-        # buffer to delete, to not run delete on every adding
-        buffer_size = 5
+        with FileLock(self.path):
+            # buffer to delete, to not run delete on every adding
+            buffer_size = 5
 
-        if self.max_size is None:
-            return
+            if self.max_size is None:
+                return
 
-        cur_count = len(os.listdir(self.path))
+            cur_count = len(os.listdir(self.path))
 
-        # remove oldest
-        if cur_count > self.max_size + buffer_size:
-
-            files = sorted(Path(self.path).iterdir(), key=os.path.getmtime)
-            for file in files[:cur_count-self.max_size]:
-                self.delete_file(file)
+            if cur_count > self.max_size + buffer_size:
+                try:
+                    files = sorted(Path(self.path).iterdir(), key=os.path.getmtime)
+                    for file in files[:cur_count - self.max_size]:
+                        self.delete_file(file)
+                except FileNotFoundError:
+                    pass
 
     def file_path(self, name):
         return self.path / name
@@ -158,18 +164,20 @@ class FileCache(BaseCache):
 
     def get_df(self, name):
         path = self.file_path(name)
-
-        if not os.path.exists(path):
-            return None
-        return pd.read_pickle(path)
+        with FileLock(self.path):
+            if not os.path.exists(path):
+                return None
+            value = pd.read_pickle(path)
+        return value
 
     def get(self, name):
         path = self.file_path(name)
 
-        if not os.path.exists(path):
-            return None
-        with open(path, 'rb') as fd:
-            value = fd.read()
+        with FileLock(self.path):
+            if not os.path.exists(path):
+                return None
+            with open(path, 'rb') as fd:
+                value = fd.read()
         value = self.deserialize(value)
         return value
 
@@ -224,7 +232,7 @@ class RedisCache(BaseCache):
 
         self.client.set(key, value)
         # using key with category name to store all keys with modify time
-        self.client.hset(self.category, key, int(time.time()*1000))
+        self.client.hset(self.category, key, int(time.time() * 1000))
 
         self.clear_old_cache(key)
 

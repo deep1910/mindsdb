@@ -12,12 +12,11 @@ migrate.migrate_to_head()
 
 from mindsdb.utilities.config import Config
 from mindsdb.integrations.utilities.test_utils import HandlerControllerMock, PG_HANDLER_NAME, PG_CONNECTION_DATA
-from mindsdb.interfaces.database.integrations import IntegrationController
+from mindsdb.interfaces.database.integrations import integration_controller
 from mindsdb.integrations.handlers.lightwood_handler.lightwood_handler.lightwood_handler import LightwoodHandler
 # from mindsdb.integrations.handlers.lightwood_handler.lightwood_handler.utils import load_predictor
 from mindsdb.interfaces.storage.fs import FsStore
 from mindsdb.interfaces.model.model_controller import ModelController
-from mindsdb.utilities.with_kwargs_wrapper import WithKWArgsWrapper
 from mindsdb.integrations.libs.response import RESPONSE_TYPE
 import mindsdb.interfaces.storage.db as db
 
@@ -27,7 +26,7 @@ class LightwoodHandlerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # region create permanent integrations
-        for integration_name in ['files', 'views', 'lightwood']:
+        for integration_name in ['files', 'lightwood']:
             integration_record = db.Integration(
                 name=integration_name,
                 data={},
@@ -46,13 +45,13 @@ class LightwoodHandlerTest(unittest.TestCase):
         db.session.commit()
         # endregion
 
-        handler_controller = IntegrationController()
+        handler_controller = integration_controller
 
         cls.handler = LightwoodHandler(
             'lightwood',
             handler_controller=handler_controller,
-            fs_store=WithKWArgsWrapper(FsStore(), company_id=None),
-            model_controller=WithKWArgsWrapper(ModelController(), company_id=None)
+            fs_store=FsStore(),
+            model_controller=ModelController()
         )
         cls.config = Config()
 

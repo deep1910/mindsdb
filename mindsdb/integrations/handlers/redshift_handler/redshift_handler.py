@@ -7,11 +7,11 @@ import redshift_connector
 from mindsdb_sql import parse_sql
 from mindsdb_sql.render.sqlalchemy_render import SqlalchemyRender
 from redshift_sqlalchemy import dialect
-from mindsdb.integrations.libs.base_handler import DatabaseHandler
+from mindsdb.integrations.libs.base import DatabaseHandler
 
 from mindsdb_sql.parser.ast.base import ASTNode
 
-from mindsdb.utilities.log import log
+from mindsdb.utilities import log
 from mindsdb.integrations.libs.response import (
     HandlerStatusResponse as StatusResponse,
     HandlerResponse as Response,
@@ -19,6 +19,7 @@ from mindsdb.integrations.libs.response import (
 )
 from mindsdb.integrations.libs.const import HANDLER_CONNECTION_ARG_TYPE as ARG_TYPE
 
+logger = log.getLogger(__name__)
 
 class RedshiftHandler(DatabaseHandler):
     """
@@ -95,7 +96,7 @@ class RedshiftHandler(DatabaseHandler):
             self.connect()
             response.success = True
         except Exception as e:
-            log.error(f'Error connecting to Redshift {self.connection_data["database"]}, {e}!')
+            logger.error(f'Error connecting to Redshift {self.connection_data["database"]}, {e}!')
             response.error_message = str(e)
         finally:
             if response.success is True and need_to_close:
@@ -134,7 +135,7 @@ class RedshiftHandler(DatabaseHandler):
                     response = Response(RESPONSE_TYPE.OK)
                     connection.commit()
             except Exception as e:
-                log.error(f'Error running query: {query} on {self.connection_data["database"]}!')
+                logger.error(f'Error running query: {query} on {self.connection_data["database"]}!')
                 response = Response(
                     RESPONSE_TYPE.ERROR,
                     error_message=str(e)
@@ -202,23 +203,33 @@ class RedshiftHandler(DatabaseHandler):
 connection_args = OrderedDict(
     host={
         'type': ARG_TYPE.STR,
-        'description': 'The host name or IP address of the Redshift cluster.'
+        'description': 'The host name or IP address of the Redshift cluster.',
+        'required': True,
+        'label': 'Host'
     },
     port={
         'type': ARG_TYPE.INT,
-        'description': 'The port to use when connecting with the Redshift cluster.'
+        'description': 'The port to use when connecting with the Redshift cluster.',
+        'required': True,
+        'label': 'Port'
     },
     database={
         'type': ARG_TYPE.STR,
-        'description': 'The database name to use when connecting with the Redshift cluster.'
+        'description': 'The database name to use when connecting with the Redshift cluster.',
+        'required': True,
+        'label': 'Database'
     },
     user={
         'type': ARG_TYPE.STR,
-        'description': 'The user name used to authenticate with the Redshift cluster.'
+        'description': 'The user name used to authenticate with the Redshift cluster.',
+        'required': True,
+        'label': 'User'
     },
     password={
-        'type': ARG_TYPE.STR,
-        'description': 'The password to authenticate the user with the Redshift cluster.'
+        'type': ARG_TYPE.PWD,
+        'description': 'The password to authenticate the user with the Redshift cluster.',
+        'required': True,
+        'label': 'Password'
     }
 )
 

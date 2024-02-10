@@ -1,1 +1,1 @@
-psycopg[binary] >= 1.15.3
+-r mindsdb/integrations/handlers/postgres_handler/requirements.txt

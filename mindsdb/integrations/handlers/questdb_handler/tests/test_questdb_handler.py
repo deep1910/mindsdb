@@ -1,17 +1,19 @@
 import unittest
 from mindsdb.integrations.handlers.questdb_handler.questdb_handler import QuestDBHandler
-from mindsdb.api.mysql.mysql_proxy.libs.constants.response_type import RESPONSE_TYPE
+from mindsdb.api.executor.data_types.response_type import RESPONSE_TYPE
 
 
 class QuestDBHandlerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kwargs = {
-            "host": "127.0.0.1",
-            "port": "8812",
-            "user": "admin",
-            "password": "quest",
-            "database": "questdb"
+            "connection_data": {
+                "host": "127.0.0.1",
+                "port": "8812",
+                "user": "admin",
+                "password": "quest",
+                "database": "questdb"
+            }
         }
         cls.handler = QuestDBHandler('test_questdb_handler', **cls.kwargs)
 
